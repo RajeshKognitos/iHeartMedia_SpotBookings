@@ -19,7 +19,7 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "list_runs",
     description:
-      "List recent automation runs with their statuses and dates. Returns up to 50 runs.",
+      "List recent scheduling jobs with their statuses (Completed, Needs decision, Failed) and dates. Returns up to 50 jobs.",
     input_schema: {
       type: "object" as const,
       properties: {},
@@ -29,11 +29,11 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "get_run",
     description:
-      "Get full details of a specific run by its ID, including all outputs and status information.",
+      "Get full details of a specific scheduling job by its ID, including spots scheduled, success rate, and status.",
     input_schema: {
       type: "object" as const,
       properties: {
-        run_id: { type: "string", description: "The run ID to retrieve" },
+        run_id: { type: "string", description: "The scheduling job ID to retrieve" },
       },
       required: ["run_id"],
     },
@@ -41,7 +41,7 @@ const TOOLS: Anthropic.Tool[] = [
   {
     name: "get_automation",
     description:
-      "Get details about the automation, including its code, connections, and description.",
+      "Get details about the Radio Traffic Scheduling automation, including description and how it works.",
     input_schema: {
       type: "object" as const,
       properties: {},

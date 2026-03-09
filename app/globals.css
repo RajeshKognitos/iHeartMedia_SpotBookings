@@ -1,9 +1,31 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-@import '../node_modules/@kognitos/lattice/dist/theme.css';
-@import '../node_modules/@kognitos/lattice/dist/fonts.css';
-@source '../node_modules/@kognitos/lattice/dist/**/*.{js}';
+/* iHeartMedia brand theme — Spot Bookings app
+   Brand: iHeartRadio Red #C6002B, Eerie Black #111820, Spanish Gray #919395
+   Ref: brand.iheart.com/colors */
+@theme {
+  --color-background: hsl(0 0% 100%);
+  --color-foreground: hsl(214 30% 10%);
+  --color-card: hsl(0 0% 100%);
+  --color-card-foreground: hsl(214 30% 10%);
+  --color-primary: hsl(348 100% 39%);
+  --color-primary-foreground: hsl(0 0% 100%);
+  --color-muted: hsl(220 10% 96%);
+  --color-muted-foreground: hsl(220 2% 58%);
+  --color-border: hsl(220 10% 90%);
+  --color-destructive: hsl(0 84% 55%);
+  --color-sidebar: hsl(214 30% 98%);
+  --color-chart-1: hsl(348 100% 39%);
+  --color-chart-2: hsl(214 50% 45%);
+  --color-input: hsl(220 10% 90%);
+  --color-ring: hsl(348 100% 39%);
+}
+:root {
+  --chart-1: 348 100% 39%;
+  --chart-2: 214 50% 45%;
+  --destructive: 0 84% 55%;
+}
 
 .chat-markdown h1 {
   font-size: 1.125rem;

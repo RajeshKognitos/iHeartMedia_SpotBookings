@@ -1,21 +1,19 @@
 "use client";
 
 import "./globals.css";
-import { ThemeProvider, SidebarProvider, SidebarInset } from "@kognitos/lattice";
 import { ChatProvider } from "@/lib/chat/chat-context";
+import AppSidebar from "@/components/AppSidebar";
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <body>
-        <ThemeProvider defaultTheme="light">
-          <ChatProvider>
-            <SidebarProvider>
-              {/* Add your <AppSidebar /> component here */}
-              <SidebarInset>{children}</SidebarInset>
-            </SidebarProvider>
-          </ChatProvider>
-        </ThemeProvider>
+      <body className="min-h-screen bg-background text-foreground">
+        <ChatProvider>
+          <div className="flex h-screen">
+            <AppSidebar />
+            <main className="flex-1 overflow-auto">{children}</main>
+          </div>
+        </ChatProvider>
       </body>
     </html>
   );
