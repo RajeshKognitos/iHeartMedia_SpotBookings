@@ -1,16 +1,16 @@
-# Design System — Spot Bookings (iHeartMedia)
+# Design System — Spot Bookings Console
 
 ## Brand
 
-**iHeartMedia brand colors** (from brand.iheart.com):
+**Enterprise-grade, high-contrast palette:**
 
-| Token   | Hex       | Use                    |
-|--------|-----------|------------------------|
-| Primary | `#C6002B` | Links, buttons, charts |
-| Dark    | `#111820` | Text, headings        |
-| Gray    | `#919395` | Muted text, borders   |
+- **Primary:** Charcoal (`hsl(220 18% 18%)`) — most buttons, links, active nav. White text on primary buttons.
+- **Accent:** Yellow `#f2ff70` (`--color-accent`) — brand color. Used where it’s readable: main CTA (e.g. “Spot booking stats”), primary chart color. Always with dark text (`--color-accent-foreground`), never yellow-on-white.
+- **Background:** White — page and cards.
+- **Text:** Near-black for body; muted gray for secondary.
+- **Charts:** Chart-1 = yellow (accent); chart-2 = slate blue.
 
-Theme tokens in `app/globals.css`: `--color-primary`, `--color-foreground`, `--color-muted-foreground`, `--color-border`, `--color-chart-1`, `--color-chart-2`, `--color-destructive`. All UI uses these; no hardcoded hex.
+Theme tokens: `--color-primary`, `--color-accent`, `--color-accent-foreground`, `--color-foreground`, `--color-muted-foreground`, `--color-border`, `--color-chart-1`, `--color-chart-2`, `--color-destructive`. No hardcoded hex.
 
 ## Audience
 
@@ -24,7 +24,7 @@ Theme tokens in `app/globals.css`: `--color-primary`, `--color-foreground`, `--c
 
 ## Layout & navigation
 
-- **Sidebar:** Always open; order: Traffic dashboard → Line items → Exceptions → Chat. Footer: “Powered by Kognitos”.
+- **Sidebar:** Always open; order: Dashboard → Spot booking stats → Exceptions & resolutions → Customer stats → Line items → Chat. Footer: “Powered by Kognitos”.
 - **Main:** Full-height scroll; pages use `p-6 space-y-6`; sections use `rounded-lg border border-border bg-card p-4`.
 
 ## Components

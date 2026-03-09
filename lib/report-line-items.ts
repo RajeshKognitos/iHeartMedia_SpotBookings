@@ -21,20 +21,25 @@ export interface ReportLineItem {
   create_time: string;
   /** Date only (YYYY-MM-DD) for grouping and dedupe */
   broadcast_day: string;
-  /** Input column from report */
+  /** Input column from report (e.g. Spot ID, Status) */
   input: string;
   /** Exception detail if any */
   exception_detail: string;
-  /** Output column from report */
+  /** Output column from report (e.g. Priority) */
   output: string;
+  /** Advertiser / customer name (from Advertiser column) */
+  advertiser?: string;
+  /** Revenue in dollars (from S_Value column) */
+  revenue?: number;
   /** First run ID we kept for this (day, line) after dedupe */
   source_run_id?: string;
 }
 
-/** Possible column names from automation (case-insensitive, with normalizer to snake). */
 const INPUT_KEYS = ["input"];
 const EXCEPTION_KEYS = ["exception_detail", "exception detail", "exceptiondetail"];
 const OUTPUT_KEYS = ["output"];
+const ADVERTISER_KEYS = ["advertiser"];
+const S_VALUE_KEYS = ["s_value", "s value"];
 
 function pickColumn(row: Record<string, unknown>, keys: string[]): string {
   const lower = (k: string) => k.toLowerCase().replace(/\s+/g, "_");
@@ -54,6 +59,28 @@ function pickColumn(row: Record<string, unknown>, keys: string[]): string {
   return "";
 }
 
+function pickRevenue(row: Record<string, unknown>): number | undefined {
+  const lower = (k: string) => k.toLowerCase().replace(/\s+/g, "_");
+  for (const key of S_VALUE_KEYS) {
+    for (const [k, v] of Object.entries(row)) {
+      if (lower(k) === lower(key) && v != null) {
+        const s = String(v).replace(/[$,\s]/g, "");
+        const n = parseFloat(s);
+        if (!Number.isNaN(n)) return n;
+        return undefined;
+      }
+    }
+  }
+  for (const [k, v] of Object.entries(row)) {
+    if (k.toLowerCase().includes("value") && v != null) {
+      const s = String(v).replace(/[$,\s]/g, "");
+      const n = parseFloat(s);
+      if (!Number.isNaN(n)) return n;
+    }
+  }
+  return undefined;
+}
+
 function normalizeRow(
   row: Record<string, unknown>,
   runId: string,
@@ -62,6 +89,8 @@ function normalizeRow(
   const broadcast_day =
     createTime.slice(0, 10) ||
     new Date(createTime).toISOString().slice(0, 10);
+  const advertiser = pickColumn(row, ADVERTISER_KEYS) || undefined;
+  const revenue = pickRevenue(row);
   return {
     run_id: runId,
     create_time: createTime,
@@ -69,6 +98,8 @@ function normalizeRow(
     input: pickColumn(row, INPUT_KEYS),
     exception_detail: pickColumn(row, EXCEPTION_KEYS),
     output: pickColumn(row, OUTPUT_KEYS),
+    ...(advertiser && { advertiser }),
+    ...(revenue != null && { revenue }),
   };
 }
 
@@ -77,14 +108,17 @@ function normHeader(h: string): string {
   return h.toLowerCase().replace(/\s+/g, "_").trim();
 }
 
+type ParsedColumn = "input" | "exception_detail" | "output" | "advertiser" | "revenue";
+
 /** Map header index to our column type. */
-function headerToColumn(normalized: string): "input" | "exception_detail" | "output" | null {
+function headerToColumn(normalized: string): ParsedColumn | null {
   if (normalized === "input" || normalized.includes("input") || normalized === "spot_id") return "input";
+  if (normalized === "advertiser") return "advertiser";
+  if (normalized === "s_value" || normalized === "svalue") return "revenue";
   if (
     normalized === "exception_detail" ||
     normalized === "exceptiondetail" ||
-    normalized.includes("exception") ||
-    normalized === "advertiser"
+    normalized.includes("exception")
   )
     return "exception_detail";
   if (normalized === "output" || normalized.includes("output") || normalized === "priority") return "output";
@@ -107,8 +141,8 @@ function looksLikeHeaderRow(row: Record<string, string>): boolean {
  * Looks for a table in a section with "report" or "output" in class/id, or the first table with a thead.
  * Returns rows as { input, exception_detail, output } keyed by column mapping from header row.
  */
-export function parseReportTableFromHtml(html: string): Record<string, string>[] {
-  const rows: Record<string, string>[] = [];
+export function parseReportTableFromHtml(html: string): Record<string, string | number>[] {
+  const rows: Record<string, string | number>[] = [];
   if (!html || typeof html !== "string") return rows;
   try {
     const $ = cheerio.load(html);
@@ -123,11 +157,10 @@ export function parseReportTableFromHtml(html: string): Record<string, string>[]
     $headerCells.each((_, el) => {
       headers.push(normHeader($(el).text()));
     });
-    const colMap: ("input" | "exception_detail" | "output")[] = headers.map((h) => {
+    const colMap: ParsedColumn[] = headers.map((h) => {
       const c = headerToColumn(h);
-      return c ?? "input"; // fallback first column to input if unknown
+      return c ?? "input";
     });
-    // If we didn't find clear headers, assume order: input, exception_detail, output
     const usePositional =
       !headers.some((h) => headerToColumn(h) === "input") &&
       !headers.some((h) => headerToColumn(h) === "output");
@@ -142,20 +175,30 @@ export function parseReportTableFromHtml(html: string): Record<string, string>[]
           cells.push($(cell).text().trim());
         });
       if (cells.length === 0) return;
-      const row: Record<string, string> = { input: "", exception_detail: "", output: "" };
+      const row: Record<string, string | number> = { input: "", exception_detail: "", output: "" };
       if (usePositional) {
         row.input = cells[0] ?? "";
         row.exception_detail = cells[1] ?? "";
         row.output = cells[2] ?? "";
+        if (cells[3] != null) row.advertiser = cells[3];
+        if (cells[4] != null) {
+          const n = parseFloat(String(cells[4]).replace(/[$,\s]/g, ""));
+          if (!Number.isNaN(n)) row.revenue = n;
+        }
       } else {
         colMap.forEach((col, i) => {
-          row[col] = cells[i] ?? "";
+          const val = cells[i] ?? "";
+          if (col === "revenue") {
+            const n = parseFloat(String(val).replace(/[$,\s]/g, ""));
+            if (!Number.isNaN(n)) row.revenue = n;
+          } else {
+            row[col] = val;
+          }
         });
       }
       rows.push(row);
     });
-    // Drop header row if it was included (e.g. table has no thead and first tr is header)
-    return rows.filter((row) => !looksLikeHeaderRow(row));
+    return rows.filter((row) => !looksLikeHeaderRow(row as Record<string, string>));
   } catch {
     // ignore parse errors
   }
@@ -207,14 +250,20 @@ export function getReportLineItemsFromRun(raw: {
   }
   if (html) {
     const parsed = parseReportTableFromHtml(html);
-    return parsed.map((row) => ({
-      run_id: runId,
-      create_time: createTime,
-      broadcast_day: createTime.slice(0, 10) || new Date(createTime).toISOString().slice(0, 10),
-      input: row.input ?? "",
-      exception_detail: row.exception_detail ?? "",
-      output: row.output ?? "",
-    }));
+    return parsed.map((row) => {
+      const revenue = typeof row.revenue === "number" ? row.revenue : undefined;
+      const advertiser = typeof row.advertiser === "string" && row.advertiser ? row.advertiser : undefined;
+      return {
+        run_id: runId,
+        create_time: createTime,
+        broadcast_day: createTime.slice(0, 10) || new Date(createTime).toISOString().slice(0, 10),
+        input: String(row.input ?? ""),
+        exception_detail: String(row.exception_detail ?? ""),
+        output: String(row.output ?? ""),
+        ...(advertiser && { advertiser }),
+        ...(revenue != null && { revenue }),
+      };
+    });
   }
 
   return [];
@@ -227,7 +276,7 @@ export function getReportLineItemsFromRun(raw: {
 export function dedupeLineItemsByDay(items: ReportLineItem[]): ReportLineItem[] {
   const seen = new Map<string, ReportLineItem>();
   const key = (item: ReportLineItem) =>
-    `${item.broadcast_day}\t${item.input}\t${item.exception_detail}\t${item.output}`;
+    `${item.broadcast_day}\t${item.input}\t${item.exception_detail}\t${item.output}\t${item.advertiser ?? ""}\t${item.revenue ?? ""}`;
 
   const sorted = [...items].sort(
     (a, b) => a.create_time.localeCompare(b.create_time)

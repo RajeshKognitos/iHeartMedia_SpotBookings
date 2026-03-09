@@ -10,29 +10,21 @@ import {
   ResponsiveContainer,
   Tooltip,
   Cell,
-  LineChart,
-  Line,
-  CartesianGrid,
 } from "recharts";
 import dayjs from "dayjs";
 import type { RunSummary } from "@/lib/runs";
 import { statusLabel } from "@/lib/runs";
-
-const PERIODS = [
-  { label: "Last 7 days", days: 7 },
-  { label: "Last 30 days", days: 30 },
-  { label: "All", days: null as number | null },
-] as const;
+import { PERIOD_OPTIONS, type PeriodValue } from "@/lib/periods";
 
 export default function DashboardPage() {
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [periodIndex, setPeriodIndex] = useState(0);
+  const [period, setPeriod] = useState<PeriodValue>("30d");
 
   useEffect(() => {
     let cancelled = false;
-    fetch("/api/runs")
+    fetch(`/api/runs?period=${period}`)
       .then((res) => {
         if (!res.ok) throw new Error(res.status === 502 ? "Could not reach system" : "Failed to load traffic");
         return res.json();
@@ -49,14 +41,9 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [period]);
 
-  const period = PERIODS[periodIndex];
-  const cutoff = period.days ? dayjs().subtract(period.days, "day").toISOString() : null;
-  const filteredRuns = useMemo(
-    () => (cutoff ? runs.filter((r) => r.createTime && r.createTime >= cutoff) : runs),
-    [runs, cutoff]
-  );
+  const filteredRuns = runs;
 
   const completed = filteredRuns.filter((r) => r.status === "completed");
   const needsDecision = filteredRuns.filter((r) => r.status === "awaiting_guidance");
@@ -88,8 +75,6 @@ export default function DashboardPage() {
       if (r.status === "completed" && r.outputs?.success_rate != null) {
         byDay[day].placementRate =
           (byDay[day].placementRate * (byDay[day].completed - 1) + r.outputs.success_rate) / byDay[day].completed;
-      } else if (r.status === "completed") {
-        byDay[day].placementRate = byDay[day].placementRate;
       }
     });
     return Object.entries(byDay)
@@ -101,26 +86,6 @@ export default function DashboardPage() {
         placementRate: v.completed > 0 ? Math.round(v.placementRate) : 0,
       }));
   }, [filteredRuns]);
-
-  // Success rate distribution (completed runs only)
-  const successBuckets = useMemo(() => {
-    const buckets = [
-      { range: "95–100%", min: 95, max: 101, count: 0 },
-      { range: "90–95%", min: 90, max: 95, count: 0 },
-      { range: "80–90%", min: 80, max: 90, count: 0 },
-      { range: "<80%", min: 0, max: 80, count: 0 },
-    ];
-    completed.forEach((r) => {
-      const rate = r.outputs?.success_rate ?? 0;
-      const b = buckets.find((b) => rate >= b.min && rate < b.max);
-      if (b) b.count += 1;
-    });
-    return buckets.map((b) => ({
-      name: b.range,
-      value: b.count,
-      fill: b.min >= 95 ? "hsl(var(--chart-1))" : b.min >= 90 ? "hsl(var(--chart-2))" : b.min >= 80 ? "hsl(215 16% 55%)" : "hsl(215 16% 45%)",
-    }));
-  }, [completed]);
 
   const statusChartData = [
     { name: "Traffic clear", value: completed.length, fill: "hsl(var(--chart-1))" },
@@ -164,29 +129,36 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Traffic &amp; Spot Bookings</h1>
+          <h1 className="text-2xl font-semibold text-foreground">Executive dashboard</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Placement rate, conflicts, and broadcast-day traffic at a glance
+            Spot booking summary and activity
           </p>
         </div>
-        <div className="flex rounded-lg border border-border p-0.5 bg-muted/30">
-          {PERIODS.map((p, i) => (
-            <button
-              key={p.label}
-              onClick={() => setPeriodIndex(i)}
-              className={`px-3 py-1.5 text-sm font-medium rounded-md transition-colors ${
-                i === periodIndex ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {p.label}
-            </button>
-          ))}
+        <div className="flex flex-wrap gap-2">
+          <select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as PeriodValue)}
+            className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground"
+          >
+            {PERIOD_OPTIONS.map((p) => (
+              <option key={p.value} value={p.value}>{p.label}</option>
+            ))}
+          </select>
+          <Link href="/stats" className="rounded-lg bg-accent px-3 py-1.5 text-sm font-medium text-accent-foreground hover:opacity-90">
+            Spot booking stats
+          </Link>
+          <Link href="/exceptions-resolutions" className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted/50">
+            Exceptions &amp; resolutions
+          </Link>
+          <Link href="/customers" className="rounded-lg border border-border px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted/50">
+            Customer stats
+          </Link>
         </div>
       </div>
 
-      {/* Traffic at a glance — 6 cards */}
+      {/* Hero KPIs */}
       <section>
-        <h2 className="text-sm font-medium text-muted-foreground mb-3">Traffic at a glance</h2>
+        <h2 className="text-sm font-medium text-muted-foreground mb-3">Summary</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
           <div className="rounded-lg border border-border bg-card p-4">
             <p className="text-xs font-medium text-muted-foreground">Broadcast days</p>
@@ -223,104 +195,47 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* Charts row */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Broadcast days per day */}
-        <div className="rounded-lg border border-border bg-card p-4">
-          <h2 className="text-lg font-medium text-foreground mb-3">Spot bookings by day</h2>
-          <p className="text-sm text-muted-foreground mb-4">Number of broadcast-day traffic runs per day</p>
-          {runsByDay.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">No data in this period</p>
-          ) : (
-            <div className="h-52">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={runsByDay} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                  <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Bar dataKey="broadcastDays" name="Broadcast days" fill="hsl(var(--primary))" radius={4} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </div>
+      {/* Activity: broadcast days by day */}
+      <section className="rounded-lg border border-border bg-card p-4">
+        <h2 className="text-lg font-medium text-foreground mb-3">Spot bookings by day</h2>
+        <p className="text-sm text-muted-foreground mb-4">Broadcast-day runs per day in selected period</p>
+        {runsByDay.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-8 text-center">No data in this period</p>
+        ) : (
+          <div className="h-48">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={runsByDay} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                <YAxis allowDecimals={false} tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="broadcastDays" name="Broadcast days" fill="hsl(var(--chart-1))" radius={4} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
+      </section>
 
-        {/* Placement rate over time */}
-        <div className="rounded-lg border border-border bg-card p-4">
-          <h2 className="text-lg font-medium text-foreground mb-3">Placement rate over time</h2>
-          <p className="text-sm text-muted-foreground mb-4">Daily average placement rate (%) for completed traffic</p>
-          {runsByDay.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-8 text-center">No data in this period</p>
-          ) : (
-            <div className="h-52">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={runsByDay} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                  <YAxis domain={[0, 100]} tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Line
-                    type="monotone"
-                    dataKey="placementRate"
-                    name="Placement rate %"
-                    stroke="hsl(var(--chart-1))"
-                    strokeWidth={2}
-                    dot={{ r: 3 }}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Success rate distribution + Traffic run status */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <div className="rounded-lg border border-border bg-card p-4">
-          <h2 className="text-lg font-medium text-foreground mb-3">Placement rate distribution</h2>
-          <p className="text-sm text-muted-foreground mb-4">How many completed broadcast days fall in each rate band</p>
-          {successBuckets.every((b) => b.value === 0) ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">No completed traffic in this period</p>
-          ) : (
-            <div className="h-40">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={successBuckets} layout="vertical" margin={{ left: 60, right: 20 }}>
-                  <XAxis type="number" />
-                  <YAxis type="category" dataKey="name" width={55} tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Bar dataKey="value" name="Broadcast days" radius={4}>
-                    {successBuckets.map((entry, i) => (
-                      <Cell key={i} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </div>
-        <div className="rounded-lg border border-border bg-card p-4">
-          <h2 className="text-lg font-medium text-foreground mb-3">Traffic run status</h2>
-          <p className="text-sm text-muted-foreground mb-4">Runs by outcome in selected period</p>
-          {statusChartData.length === 0 ? (
-            <p className="text-sm text-muted-foreground py-6 text-center">No traffic in this period</p>
-          ) : (
-            <div className="h-40">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={statusChartData} layout="vertical" margin={{ left: 0, right: 20 }}>
-                  <XAxis type="number" />
-                  <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
-                  <Tooltip />
-                  <Bar dataKey="value" name="Runs" radius={4}>
-                    {statusChartData.map((entry, i) => (
-                      <Cell key={i} fill={entry.fill} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-          )}
-        </div>
+      <div className="rounded-lg border border-border bg-card p-4">
+        <h2 className="text-lg font-medium text-foreground mb-3">Run status</h2>
+        <p className="text-sm text-muted-foreground mb-4">Outcome in selected period</p>
+        {statusChartData.length === 0 ? (
+          <p className="text-sm text-muted-foreground py-6 text-center">No traffic in this period</p>
+        ) : (
+          <div className="h-32">
+            <ResponsiveContainer width="100%" height="100%">
+              <BarChart data={statusChartData} layout="vertical" margin={{ left: 0, right: 20 }}>
+                <XAxis type="number" />
+                <YAxis type="category" dataKey="name" width={120} tick={{ fontSize: 11 }} />
+                <Tooltip />
+                <Bar dataKey="value" name="Runs" radius={4}>
+                  {statusChartData.map((entry, i) => (
+                    <Cell key={i} fill={entry.fill} />
+                  ))}
+                </Bar>
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+        )}
       </div>
 
       {/* Conflicts needing your decision */}

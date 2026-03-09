@@ -5,22 +5,17 @@ import Link from "next/link";
 import dayjs from "dayjs";
 import type { ReportLineItem } from "@/lib/report-line-items";
 import ErrorState from "@/components/ErrorState";
-
-const PERIODS = [
-  { label: "Last 7 days", days: 7 },
-  { label: "Last 30 days", days: 30 },
-  { label: "All", days: null as number | null },
-] as const;
+import { PERIOD_OPTIONS, type PeriodValue } from "@/lib/periods";
 
 function downloadCsv(items: ReportLineItem[]) {
-  const header = "Broadcast day,Input,Exception detail,Output,Job ID\n";
-  const escape = (s: string) => {
-    const t = (s ?? "").replace(/"/g, '""');
+  const header = "Broadcast day,Input,Exception detail,Output,Advertiser,Revenue,Job ID\n";
+  const escape = (s: string | number | undefined) => {
+    const t = (s ?? "").toString().replace(/"/g, '""');
     return t.includes(",") || t.includes('"') || t.includes("\n") ? `"${t}"` : t;
   };
   const rows = items.map(
     (i) =>
-      `${escape(i.broadcast_day)},${escape(i.input)},${escape(i.exception_detail)},${escape(i.output)},${escape(i.source_run_id ?? i.run_id ?? "")}`
+      `${escape(i.broadcast_day)},${escape(i.input)},${escape(i.exception_detail)},${escape(i.output)},${escape(i.advertiser)},${escape(i.revenue)},${escape(i.source_run_id ?? i.run_id ?? "")}`
   );
   const csv = header + rows.join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
@@ -37,18 +32,15 @@ export default function LineItemsPage() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [periodIndex, setPeriodIndex] = useState(0);
+  const [period, setPeriod] = useState<PeriodValue>("30d");
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDay, setFilterDay] = useState("");
   const [filterException, setFilterException] = useState<"all" | "yes" | "no">("all");
 
-  const period = PERIODS[periodIndex];
-  const daysParam = period.days === null ? "all" : String(period.days);
-
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`/api/report-line-items?days=${daysParam}`)
+    fetch(`/api/report-line-items?period=${period}`)
       .then((res) => {
         if (!res.ok) throw new Error("Failed to load line items");
         return res.json();
@@ -68,7 +60,7 @@ export default function LineItemsPage() {
     return () => {
       cancelled = true;
     };
-  }, [daysParam]);
+  }, [period]);
 
   const sorted = useMemo(
     () =>
@@ -131,21 +123,15 @@ export default function LineItemsPage() {
       </div>
 
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex rounded-lg border border-border bg-muted/30 p-0.5">
-          {PERIODS.map((p, i) => (
-            <button
-              key={p.label}
-              onClick={() => setPeriodIndex(i)}
-              className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-                periodIndex === i
-                  ? "bg-background text-foreground shadow-sm"
-                  : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              {p.label}
-            </button>
+        <select
+          value={period}
+          onChange={(e) => setPeriod(e.target.value as PeriodValue)}
+          className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground"
+        >
+          {PERIOD_OPTIONS.map((p) => (
+            <option key={p.value} value={p.value}>{p.label}</option>
           ))}
-        </div>
+        </select>
         <select
           value={filterDay}
           onChange={(e) => setFilterDay(e.target.value)}
@@ -206,8 +192,10 @@ export default function LineItemsPage() {
                 <tr className="border-b border-border bg-muted/30">
                   <th className="text-left font-medium text-foreground px-4 py-2.5">Broadcast day</th>
                   <th className="text-left font-medium text-foreground px-4 py-2.5">Input</th>
+                  <th className="text-left font-medium text-foreground px-4 py-2.5">Advertiser</th>
                   <th className="text-left font-medium text-foreground px-4 py-2.5">Exception detail</th>
                   <th className="text-left font-medium text-foreground px-4 py-2.5">Output</th>
+                  <th className="text-right font-medium text-foreground px-4 py-2.5">Revenue</th>
                   <th className="text-left font-medium text-foreground px-4 py-2.5 w-24">Job</th>
                 </tr>
               </thead>
@@ -223,11 +211,15 @@ export default function LineItemsPage() {
                     <td className="px-4 py-2.5 text-foreground max-w-xs truncate" title={item.input}>
                       {item.input || "—"}
                     </td>
+                    <td className="px-4 py-2.5 text-foreground">{item.advertiser || "—"}</td>
                     <td className="px-4 py-2.5 text-foreground max-w-xs truncate" title={item.exception_detail}>
                       {item.exception_detail || "—"}
                     </td>
                     <td className="px-4 py-2.5 text-foreground max-w-xs truncate" title={item.output}>
                       {item.output || "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-right">
+                      {item.revenue != null ? `$${item.revenue.toFixed(2)}` : "—"}
                     </td>
                     <td className="px-4 py-2.5">
                       {(item.source_run_id ?? item.run_id) && (

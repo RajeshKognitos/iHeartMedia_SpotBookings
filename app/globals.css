@@ -1,30 +1,30 @@
 @import 'tailwindcss';
 @import 'tw-animate-css';
 
-/* iHeartMedia brand theme — Spot Bookings app
-   Brand: iHeartRadio Red #C6002B, Eerie Black #111820, Spanish Gray #919395
-   Ref: brand.iheart.com/colors */
+/* Spot Bookings console — Charcoal primary (readable), yellow #f2ff70 as brand accent */
 @theme {
   --color-background: hsl(0 0% 100%);
-  --color-foreground: hsl(214 30% 10%);
+  --color-foreground: hsl(220 18% 10%);
   --color-card: hsl(0 0% 100%);
-  --color-card-foreground: hsl(214 30% 10%);
-  --color-primary: hsl(348 100% 39%);
+  --color-card-foreground: hsl(220 18% 10%);
+  --color-primary: hsl(220 18% 18%);
   --color-primary-foreground: hsl(0 0% 100%);
+  --color-accent: hsl(65 100% 72%);
+  --color-accent-foreground: hsl(220 18% 12%);
   --color-muted: hsl(220 10% 96%);
-  --color-muted-foreground: hsl(220 2% 58%);
-  --color-border: hsl(220 10% 90%);
-  --color-destructive: hsl(0 84% 55%);
-  --color-sidebar: hsl(214 30% 98%);
-  --color-chart-1: hsl(348 100% 39%);
-  --color-chart-2: hsl(214 50% 45%);
-  --color-input: hsl(220 10% 90%);
-  --color-ring: hsl(348 100% 39%);
+  --color-muted-foreground: hsl(220 10% 42%);
+  --color-border: hsl(220 12% 90%);
+  --color-destructive: hsl(0 72% 48%);
+  --color-sidebar: hsl(220 14% 98%);
+  --color-chart-1: hsl(65 100% 72%);
+  --color-chart-2: hsl(220 50% 42%);
+  --color-input: hsl(220 12% 92%);
+  --color-ring: hsl(220 18% 18%);
 }
 :root {
-  --chart-1: 348 100% 39%;
-  --chart-2: 214 50% 45%;
-  --destructive: 0 84% 55%;
+  --chart-1: 65 100% 72%;
+  --chart-2: 220 50% 42%;
+  --destructive: 0 72% 48%;
 }
 
 .chat-markdown h1 {

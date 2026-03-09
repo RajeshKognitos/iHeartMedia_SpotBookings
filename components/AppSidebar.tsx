@@ -20,39 +20,47 @@ export default function AppSidebar() {
         <Link
           href="/"
           className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-            pathname === "/"
-              ? "bg-primary/10 text-primary"
-              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            pathname === "/" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           }`}
         >
-          Traffic dashboard
+          Dashboard
+        </Link>
+        <Link
+          href="/stats"
+          className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+            pathname === "/stats" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          }`}
+        >
+          Spot booking stats
+        </Link>
+        <Link
+          href="/exceptions-resolutions"
+          className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+            pathname === "/exceptions-resolutions" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          }`}
+        >
+          Exceptions &amp; resolutions
+        </Link>
+        <Link
+          href="/customers"
+          className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+            pathname === "/customers" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+          }`}
+        >
+          Customer stats
         </Link>
         <Link
           href="/line-items"
           className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-            pathname === "/line-items"
-              ? "bg-primary/10 text-primary"
-              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            pathname === "/line-items" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           }`}
         >
           Line items
         </Link>
         <Link
-          href="/exceptions"
-          className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-            pathname === "/exceptions"
-              ? "bg-primary/10 text-primary"
-              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
-          }`}
-        >
-          Exceptions
-        </Link>
-        <Link
           href="/chat"
           className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-            pathname === "/chat"
-              ? "bg-primary/10 text-primary"
-              : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            pathname === "/chat" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           }`}
         >
           Chat

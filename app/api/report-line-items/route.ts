@@ -5,6 +5,8 @@ import {
   dedupeLineItemsByDay,
   type ReportLineItem,
 } from "@/lib/report-line-items";
+import { getExceptionDetailsFromRun } from "@/lib/runs";
+import { isRunInPeriod, type PeriodValue } from "@/lib/periods";
 
 export const dynamic = "force-dynamic";
 
@@ -18,14 +20,12 @@ export async function GET(request: Request) {
     );
   }
   const { searchParams } = new URL(request.url);
-  const daysParam = searchParams.get("days");
+  const periodParam = (searchParams.get("period") || searchParams.get("days") || "all") as PeriodValue;
+  const period = ["7d", "30d", "90d", "this_month", "last_month", "all"].includes(periodParam)
+    ? periodParam
+    : (searchParams.get("days") === "7" ? "7d" : searchParams.get("days") === "30" ? "30d" : "all");
   const runIdParam = searchParams.get("run_id");
-  const days =
-    daysParam === "7"
-      ? 7
-      : daysParam === "30"
-        ? 30
-        : null;
+  const exceptionsOnly = searchParams.get("exceptions_only") === "true";
 
   try {
     if (runIdParam) {
@@ -58,12 +58,9 @@ export async function GET(request: Request) {
     );
 
     const allItems: ReportLineItem[] = [];
-    const cutoff = days
-      ? new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString()
-      : null;
 
     for (const run of completed) {
-      if (cutoff && (run.create_time ?? "") < cutoff) continue;
+      if (!isRunInPeriod(run.create_time ?? "", period)) continue;
       const id = (run.name ?? "").split("/").pop() ?? "";
       const runRes = await req(
         `${RUNS_PATH}/${id}`
@@ -74,11 +71,28 @@ export async function GET(request: Request) {
       allItems.push(...items);
     }
 
-    const deduped = dedupeLineItemsByDay(allItems);
+    let result = dedupeLineItemsByDay(allItems);
+    if (exceptionsOnly) {
+      result = result.filter((i) => (i.exception_detail ?? "").trim() !== "");
+    }
+
+    let run_resolutions: Record<string, string> = {};
+    if (exceptionsOnly && result.length > 0) {
+      const runIds = [...new Set(result.map((i) => i.source_run_id ?? i.run_id).filter(Boolean))];
+      for (const rid of runIds) {
+        const runRes = await req(`${RUNS_PATH}/${rid}`);
+        if (!runRes.ok) continue;
+        const raw = await runRes.json();
+        const details = getExceptionDetailsFromRun(raw);
+        run_resolutions[rid] = details.map((d) => `${d.type}: ${d.resolution}`).join("; ") || "—";
+      }
+    }
+
     return NextResponse.json({
-      line_items: deduped,
-      total: deduped.length,
-      period_days: days ?? null,
+      line_items: result,
+      total: result.length,
+      period,
+      ...(exceptionsOnly && { run_resolutions }),
     });
   } catch (e) {
     console.error("[api/report-line-items]", e);
