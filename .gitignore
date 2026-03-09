@@ -1,0 +1,5 @@
+.env
+node_modules/
+.next/
+packages/*/node_modules/
+*.tgz
