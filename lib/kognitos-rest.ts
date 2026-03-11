@@ -70,7 +70,7 @@ export async function uploadToPresigned(
   for (const [k, v] of Object.entries(uploadFields)) {
     form.append(k, v);
   }
-  form.append(fileFieldName, new Blob([file.buffer]), file.name);
+  form.append(fileFieldName, new Blob([new Uint8Array(file.buffer)]), file.name);
   const res = await fetch(uploadUrl, {
     method: "POST",
     body: form,
