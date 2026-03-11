@@ -1,16 +1,27 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import type { CustomerStatRow } from "@/app/api/customer-stats/route";
 import { PERIOD_OPTIONS, type PeriodValue } from "@/lib/periods";
 import ErrorState from "@/components/ErrorState";
 
-export default function CustomerStatsPage() {
+const PERIOD_VALUES: PeriodValue[] = ["7d", "30d", "90d", "this_month", "last_month", "all"];
+
+function CustomersContent() {
+  const searchParams = useSearchParams();
+  const periodParam = searchParams.get("period") as PeriodValue | null;
   const [customers, setCustomers] = useState<CustomerStatRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState<PeriodValue>("30d");
+  const [period, setPeriod] = useState<PeriodValue>(
+    periodParam && PERIOD_VALUES.includes(periodParam) ? periodParam : "30d"
+  );
+
+  useEffect(() => {
+    if (periodParam && PERIOD_VALUES.includes(periodParam)) setPeriod(periodParam);
+  }, [periodParam]);
 
   useEffect(() => {
     let cancelled = false;
@@ -55,9 +66,9 @@ export default function CustomerStatsPage() {
     <div className="p-6 space-y-6">
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-foreground">Customer stats</h1>
+          <h1 className="text-2xl font-semibold text-foreground">Customers</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Per-advertiser: spots (lines), exceptions, revenue
+            Per-advertiser: lines (spots), exceptions, revenue
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -70,7 +81,7 @@ export default function CustomerStatsPage() {
               <option key={p.value} value={p.value}>{p.label}</option>
             ))}
           </select>
-          <Link href="/" className="text-sm text-primary hover:underline">← Dashboard</Link>
+          <Link href="/" className="text-sm text-primary hover:underline">← Home</Link>
         </div>
       </div>
 
@@ -82,7 +93,11 @@ export default function CustomerStatsPage() {
         <section className="rounded-lg border border-border bg-card overflow-hidden">
           <div className="px-4 py-3 border-b border-border flex items-center justify-between">
             <h2 className="text-lg font-medium text-foreground">By advertiser</h2>
-            <span className="text-sm text-muted-foreground">{customers.length} advertisers</span>
+            <span className="text-sm text-muted-foreground">
+              {customers.length} advertiser{customers.length !== 1 ? "s" : ""}
+              {customers.reduce((s, c) => s + c.revenue_total, 0) > 0 &&
+                ` · $${customers.reduce((s, c) => s + c.revenue_total, 0).toFixed(2)} revenue`}
+            </span>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
@@ -109,5 +124,13 @@ export default function CustomerStatsPage() {
         </section>
       )}
     </div>
+  );
+}
+
+export default function CustomerStatsPage() {
+  return (
+    <Suspense fallback={<div className="p-6"><div className="h-8 w-48 bg-muted rounded animate-pulse" /></div>}>
+      <CustomersContent />
+    </Suspense>
   );
 }

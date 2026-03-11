@@ -1,18 +1,29 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, Suspense } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import dayjs from "dayjs";
 import type { ReportLineItem } from "@/lib/report-line-items";
 import { PERIOD_OPTIONS, type PeriodValue } from "@/lib/periods";
 import ErrorState from "@/components/ErrorState";
 
-export default function ExceptionsResolutionsPage() {
+const PERIOD_VALUES: PeriodValue[] = ["7d", "30d", "90d", "this_month", "last_month", "all"];
+
+function ExceptionsContent() {
+  const searchParams = useSearchParams();
+  const periodParam = searchParams.get("period") as PeriodValue | null;
+  const [period, setPeriod] = useState<PeriodValue>(
+    periodParam && PERIOD_VALUES.includes(periodParam) ? periodParam : "30d"
+  );
   const [lineItems, setLineItems] = useState<ReportLineItem[]>([]);
   const [runResolutions, setRunResolutions] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [period, setPeriod] = useState<PeriodValue>("30d");
+
+  useEffect(() => {
+    if (periodParam && PERIOD_VALUES.includes(periodParam)) setPeriod(periodParam);
+  }, [periodParam]);
 
   useEffect(() => {
     let cancelled = false;
@@ -85,7 +96,7 @@ export default function ExceptionsResolutionsPage() {
               <option key={p.value} value={p.value}>{p.label}</option>
             ))}
           </select>
-          <Link href="/" className="text-sm text-primary hover:underline">← Dashboard</Link>
+          <Link href="/" className="text-sm text-primary hover:underline">← Home</Link>
         </div>
       </div>
 
@@ -141,5 +152,13 @@ export default function ExceptionsResolutionsPage() {
         </section>
       )}
     </div>
+  );
+}
+
+export default function ExceptionsResolutionsPage() {
+  return (
+    <Suspense fallback={<div className="p-6"><div className="h-8 w-48 bg-muted rounded animate-pulse" /></div>}>
+      <ExceptionsContent />
+    </Suspense>
   );
 }

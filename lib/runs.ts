@@ -37,6 +37,8 @@ export interface RunSummary {
   outputs?: RunOutputs;
   /** For awaiting_guidance: run has an exception waiting; type may be unknown until astral is fetched */
   has_exception?: boolean;
+  /** One-line hint for run list (awaiting_guidance / failed) */
+  exception_summary?: string;
 }
 
 export interface ExceptionDetailItem {
@@ -140,6 +142,14 @@ export function normalizeRun(
       ? parseOutputs((raw.state.completed as { outputs?: Record<string, unknown> }).outputs)
       : undefined;
   const has_exception = status === "awaiting_guidance" || (outputs?.exception_types?.length ?? 0) > 0;
+  let exception_summary: string | undefined;
+  if (raw.state?.awaiting_guidance != null && typeof raw.state.awaiting_guidance === "object") {
+    const ag = raw.state.awaiting_guidance as { exception?: string; description?: string };
+    exception_summary = ag.description ?? ag.exception ?? "Needs decision";
+  } else if (raw.state?.failed != null && typeof raw.state.failed === "object") {
+    const f = raw.state.failed as { error?: string; description?: string };
+    exception_summary = f.description ?? f.error ?? "Failed";
+  }
   return {
     id,
     createTime: raw.create_time ?? "",
@@ -147,6 +157,7 @@ export function normalizeRun(
     kognitosUrl,
     outputs,
     ...(has_exception && { has_exception: true }),
+    ...(exception_summary && { exception_summary }),
   };
 }
 

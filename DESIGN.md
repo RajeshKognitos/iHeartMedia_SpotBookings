@@ -5,7 +5,7 @@
 **Enterprise-grade, high-contrast palette:**
 
 - **Primary:** Charcoal (`hsl(220 18% 18%)`) — most buttons, links, active nav. White text on primary buttons.
-- **Accent:** Yellow `#f2ff70` (`--color-accent`) — brand color. Used where it’s readable: main CTA (e.g. “Spot booking stats”), primary chart color. Always with dark text (`--color-accent-foreground`), never yellow-on-white.
+- **Accent:** Yellow `#f2ff70` (`--color-accent`) — brand color. Used where it’s readable: primary chart on Home, CTAs with dark text. Always with dark text (`--color-accent-foreground`), never yellow-on-white.
 - **Background:** White — page and cards.
 - **Text:** Near-black for body; muted gray for secondary.
 - **Charts:** Chart-1 = yellow (accent); chart-2 = slate blue.
@@ -24,8 +24,10 @@ Theme tokens: `--color-primary`, `--color-accent`, `--color-accent-foreground`, 
 
 ## Layout & navigation
 
-- **Sidebar:** Always open; order: Dashboard → Spot booking stats → Exceptions & resolutions → Customer stats → Line items → Chat. Footer: “Powered by Kognitos”.
-- **Main:** Full-height scroll; pages use `p-6 space-y-6`; sections use `rounded-lg border border-border bg-card p-4`.
+- **Sidebar:** Always open; order: Home → Run job → Exceptions → Customers → Line items → Chat. Footer: “Powered by Kognitos”.
+- **Home:** Single scrollable page with period at top and three sections: (A) How we’re doing — hero KPIs, spot bookings by day, run status; (B) What needs action — exception count and preview, “View all → Exceptions”; (C) Customers — count, revenue, top advertisers, “View all → Customers”. Footer links to Line items and Chat.
+- **Run job** (`/run`): Execute the scheduling process: top = form (input file URL, optional broadcast date) and "Start job"; bottom = run-level summary table (Job ID, Started, Status, Spots scheduled, Success rate, Exception hint, View details / View in Kognitos).
+- **Main:** Full-height scroll; pages use `p-6 space-y-6`; sections use `rounded-lg border border-border bg-card p-4`. Exceptions and Customers pages accept `?period=` and sync the period when opened from Home “View all”. `/stats` redirects to `/`.
 
 ## Components
 

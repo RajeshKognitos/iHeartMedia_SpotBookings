@@ -23,15 +23,15 @@ export default function AppSidebar() {
             pathname === "/" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           }`}
         >
-          Dashboard
+          Home
         </Link>
         <Link
-          href="/stats"
+          href="/run"
           className={`block rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-            pathname === "/stats" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
+            pathname === "/run" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           }`}
         >
-          Spot booking stats
+          Run job
         </Link>
         <Link
           href="/exceptions-resolutions"
@@ -39,7 +39,7 @@ export default function AppSidebar() {
             pathname === "/exceptions-resolutions" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           }`}
         >
-          Exceptions &amp; resolutions
+          Exceptions
         </Link>
         <Link
           href="/customers"
@@ -47,7 +47,7 @@ export default function AppSidebar() {
             pathname === "/customers" ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted/50 hover:text-foreground"
           }`}
         >
-          Customer stats
+          Customers
         </Link>
         <Link
           href="/line-items"

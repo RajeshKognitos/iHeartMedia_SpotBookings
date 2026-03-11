@@ -89,6 +89,10 @@ Run `npm install` and verify with `npm ls react` -- every entry should say `dedu
 └── .env.example           Required environment variables
 ```
 
+## Deploying to Vercel
+
+See **[DEPLOYMENT.md](DEPLOYMENT.md)** for step-by-step instructions: push to Git, import the repo in Vercel, add environment variables, and deploy. Optional file-upload env vars are documented there as well.
+
 ## Environment Variables
 
 | Variable | Description |
