@@ -26,14 +26,15 @@ Theme tokens: `--color-primary`, `--color-accent`, `--color-accent-foreground`, 
 
 - **Sidebar:** Always open; order: Home → Run job → Exceptions → Customers → Line items → Chat. Footer: “Powered by Kognitos”.
 - **Home:** Single scrollable page with period at top and three sections: (A) How we’re doing — hero KPIs, spot bookings by day, run status; (B) What needs action — exception count and preview, “View all → Exceptions”; (C) Customers — count, revenue, top advertisers, “View all → Customers”. Footer links to Line items and Chat.
-- **Run job** (`/run`): Execute the scheduling process: top = form (input file URL, optional broadcast date) and "Start job"; bottom = run-level summary table (Job ID, Started, Status, Spots scheduled, Success rate, Exception hint, View details / View in Kognitos).
+- **Run job** (`/run`): Execute the scheduling process: top = form (file upload, input URL, optional broadcast date) and "Start job"; bottom = run list with "X runs total", Download CSV, status filter tabs (All / Clear / Needs decision / Failed), pagination, and table with **StatusBadge** pills (Completed, Needs decision, Failed, etc.).
 - **Main:** Full-height scroll; pages use `p-6 space-y-6`; sections use `rounded-lg border border-border bg-card p-4`. Exceptions and Customers pages accept `?period=` and sync the period when opened from Home “View all”. `/stats` redirects to `/`.
 
 ## Components
 
 - **Cards:** `rounded-lg border border-border bg-card p-4`.
 - **Tables:** `w-full text-sm`, header `bg-muted/30`, row hover `hover:bg-muted/20`.
-- **Status badges:** Completed = green tint, Needs decision = amber, Failed = destructive.
+- **StatusBadge** (`components/StatusBadge.tsx`): Pill-style status (Completed = emerald, Needs decision = amber, Failed = destructive, In progress = blue, Pending = muted). Used on Run job table, job detail, and exceptions list.
+- **KpiCard** (`components/KpiCard.tsx`): Metric card with optional icon circle and variant (default, warning, destructive). Used on Home for hero KPIs.
 - **ErrorState** (`components/ErrorState.tsx`): Title, message, optional back link. Use for failed loads and not-found.
 - **Empty states:** Bordered card, muted text, optional CTA; no shared component.
 

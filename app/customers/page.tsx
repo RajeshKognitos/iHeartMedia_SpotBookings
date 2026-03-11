@@ -1,11 +1,12 @@
 "use client";
 
-import { useEffect, useState, Suspense } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import type { CustomerStatRow } from "@/app/api/customer-stats/route";
 import { PERIOD_OPTIONS, type PeriodValue } from "@/lib/periods";
 import ErrorState from "@/components/ErrorState";
+import RefreshHeader from "@/components/RefreshHeader";
 
 const PERIOD_VALUES: PeriodValue[] = ["7d", "30d", "90d", "this_month", "last_month", "all"];
 
@@ -18,6 +19,7 @@ function CustomersContent() {
   const [period, setPeriod] = useState<PeriodValue>(
     periodParam && PERIOD_VALUES.includes(periodParam) ? periodParam : "30d"
   );
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
 
   useEffect(() => {
     if (periodParam && PERIOD_VALUES.includes(periodParam)) setPeriod(periodParam);
@@ -26,13 +28,33 @@ function CustomersContent() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`/api/customer-stats?period=${period}`)
+    setError(null);
+    const key = `customers-${period}`;
+    fetch(`/api/cache?key=${encodeURIComponent(key)}`)
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load customer stats");
-        return res.json();
+        if (res.ok) return res.json() as Promise<{ data: { customers?: CustomerStatRow[] }; last_synced_at: string }>;
+        if (res.status === 404) return null;
+        throw new Error("Failed to load cache");
       })
-      .then((data: { customers: CustomerStatRow[] }) => {
-        if (!cancelled) setCustomers(data.customers ?? []);
+      .then((json) => {
+        if (cancelled) return;
+        if (json) {
+          setCustomers(json.data.customers ?? []);
+          setLastSyncedAt(json.last_synced_at ? new Date(json.last_synced_at).getTime() : null);
+          setLoading(false);
+          return;
+        }
+        return fetch("/api/cache/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key }) })
+          .then((r) => {
+            if (!r.ok) throw new Error("Failed to refresh");
+            return r.json() as Promise<{ data: { customers?: CustomerStatRow[] }; last_synced_at: string }>;
+          })
+          .then((refreshed) => {
+            if (!cancelled) {
+              setCustomers(refreshed.data.customers ?? []);
+              setLastSyncedAt(refreshed.last_synced_at ? new Date(refreshed.last_synced_at).getTime() : null);
+            }
+          });
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
@@ -40,9 +62,24 @@ function CustomersContent() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
+  }, [period]);
+
+  const handleRefresh = useCallback(() => {
+    setError(null);
+    setLoading(true);
+    const key = `customers-${period}`;
+    fetch("/api/cache/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key }) })
+      .then((res) => {
+        if (!res.ok) throw new Error("Refresh failed");
+        return res.json() as Promise<{ data: { customers?: CustomerStatRow[] }; last_synced_at: string }>;
+      })
+      .then((json) => {
+        setCustomers(json.data.customers ?? []);
+        setLastSyncedAt(json.last_synced_at ? new Date(json.last_synced_at).getTime() : null);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
+      .finally(() => setLoading(false));
   }, [period]);
 
   if (loading) {
@@ -71,7 +108,8 @@ function CustomersContent() {
             Per-advertiser: lines (spots), exceptions, revenue
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex flex-wrap items-center gap-3">
+          <RefreshHeader lastSyncedAt={lastSyncedAt} onRefresh={handleRefresh} refreshing={loading} />
           <select
             value={period}
             onChange={(e) => setPeriod(e.target.value as PeriodValue)}

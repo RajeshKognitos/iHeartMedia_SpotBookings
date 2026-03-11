@@ -30,14 +30,16 @@ In the Vercel project, go to **Settings** → **Environment Variables** and add 
 | `KOGNITOS_BASE_URL` | Yes | e.g. `https://app.us-1.kognitos.com/api/v1` |
 | `KOGNITOS_AUTOMATION_ID` | Yes | Automation (process) ID |
 | `NEXT_PUBLIC_KOGNITOS_URL` | Yes | Base app URL for links, e.g. `https://app.us-1.kognitos.com/organizations/{ORG_ID}/workspaces/{WS_ID}` |
-| `NEXT_PUBLIC_SUPABASE_URL` | Yes (for Chat) | Supabase project URL |
+| `NEXT_PUBLIC_SUPABASE_URL` | Yes (Chat + cache) | Supabase project URL |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes (for Chat) | Supabase anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Yes (for Chat) | Supabase service role key |
+| `SUPABASE_SERVICE_ROLE_KEY` | Yes (Chat + cache) | Supabase service role key; used server-side for persisted data cache |
 | `ANTHROPIC_API_KEY` | Yes (for Chat) | Claude API key |
 | `KOGNITOS_REST_API_URL` | Optional | For file upload, e.g. `https://rest-api.app.kognitos.com` |
 | `KOGNITOS_API_KEY` | Optional | REST API key for file upload |
 
 Use the same values as in your local `.env`. Never commit `.env` to the repo.
+
+**Data cache:** Dashboard data (Home, Run job, Exceptions, Customers, Line items) is persisted in Supabase so it survives tab close and is shared across devices. Ensure the `data_cache` table exists (run the migration in `supabase/migrations/00000000000002_data_cache.sql` in the Supabase SQL editor or via `supabase db push`). If Supabase or the table is missing, cache reads return 404 and the app will fetch fresh data on each load/refresh.
 
 ## 4. Dependencies (Lattice UI)
 

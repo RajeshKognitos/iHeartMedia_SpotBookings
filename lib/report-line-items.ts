@@ -289,3 +289,38 @@ export function dedupeLineItemsByDay(items: ReportLineItem[]): ReportLineItem[] 
   }
   return Array.from(seen.values());
 }
+
+/** Map line's exception_detail text to the run's exception type label for resolution lookup */
+const EXCEPTION_TYPE_LABELS = {
+  b2b: "Back-to-back conflict",
+  overfill: "Capacity overfill",
+  separation: "Competitive separation",
+} as const;
+
+function matchExceptionDetailToType(exceptionDetail: string): string | null {
+  const lower = (exceptionDetail ?? "").toLowerCase();
+  if (lower.includes("b2b") || lower.includes("back-to-back")) return EXCEPTION_TYPE_LABELS.b2b;
+  if (lower.includes("overfill") || lower.includes("capacity")) return EXCEPTION_TYPE_LABELS.overfill;
+  if (lower.includes("separation") || lower.includes("competitive")) return EXCEPTION_TYPE_LABELS.separation;
+  return null;
+}
+
+/**
+ * Get the resolution string for this line item from run-level exception details.
+ * Matches the line's exception_detail to the correct type so each row shows its own resolution.
+ */
+export function getResolutionForLine(
+  item: ReportLineItem,
+  runExceptionDetails: Record<string, { type: string; resolution: string }[]>
+): string {
+  const runId = item.source_run_id ?? item.run_id;
+  if (!runId) return "—";
+  const details = runExceptionDetails[runId];
+  if (!details?.length) return "—";
+  const matchedType = matchExceptionDetailToType(item.exception_detail ?? "");
+  if (matchedType) {
+    const found = details.find((d) => d.type === matchedType);
+    if (found) return found.resolution;
+  }
+  return details[0].resolution;
+}

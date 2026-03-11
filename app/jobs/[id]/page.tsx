@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import dayjs from "dayjs";
 import type { RunDetail } from "@/lib/runs";
-import { statusLabel } from "@/lib/runs";
+import StatusBadge from "@/components/StatusBadge";
 import type { ReportLineItem } from "@/lib/report-line-items";
 import ErrorState from "@/components/ErrorState";
 
@@ -101,19 +101,7 @@ export default function JobDetailPage() {
           )}
         </div>
         <div className="flex items-center gap-3">
-          <span
-            className={`inline-flex rounded-full px-3 py-1 text-sm font-medium ${
-              run.status === "completed"
-                ? "bg-green-500/10 text-green-700 dark:text-green-400"
-                : run.status === "awaiting_guidance"
-                  ? "bg-amber-500/10 text-amber-700 dark:text-amber-400"
-                  : run.status === "failed"
-                    ? "bg-destructive/10 text-destructive"
-                    : "bg-muted text-muted-foreground"
-            }`}
-          >
-            {statusLabel(run.status)}
-          </span>
+          <StatusBadge status={run.status} className="text-sm px-3 py-1" />
           <a
             href={run.kognitosUrl}
             target="_blank"

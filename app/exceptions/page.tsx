@@ -13,7 +13,8 @@ import {
 } from "recharts";
 import dayjs from "dayjs";
 import type { RunSummary } from "@/lib/runs";
-import { statusLabel, EXCEPTION_TYPE_LABELS } from "@/lib/runs";
+import { EXCEPTION_TYPE_LABELS } from "@/lib/runs";
+import StatusBadge from "@/components/StatusBadge";
 
 const TYPE_COLORS: Record<string, string> = {
   [EXCEPTION_TYPE_LABELS.b2b]: "hsl(var(--chart-1))",
@@ -238,7 +239,7 @@ export default function ExceptionsPage() {
                               : "bg-muted text-muted-foreground"
                         }`}
                       >
-                        {statusLabel(r.status)}
+                        <StatusBadge status={r.status} />
                       </span>
                     </td>
                     <td className="py-2">

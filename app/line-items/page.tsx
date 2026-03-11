@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import dayjs from "dayjs";
 import type { ReportLineItem } from "@/lib/report-line-items";
 import ErrorState from "@/components/ErrorState";
+import RefreshHeader from "@/components/RefreshHeader";
 import { PERIOD_OPTIONS, type PeriodValue } from "@/lib/periods";
 
 function downloadCsv(items: ReportLineItem[]) {
@@ -33,6 +34,7 @@ export default function LineItemsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [period, setPeriod] = useState<PeriodValue>("30d");
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [filterDay, setFilterDay] = useState("");
   const [filterException, setFilterException] = useState<"all" | "yes" | "no">("all");
@@ -40,16 +42,35 @@ export default function LineItemsPage() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    fetch(`/api/report-line-items?period=${period}`)
+    setError(null);
+    const key = `line_items-${period}`;
+    fetch(`/api/cache?key=${encodeURIComponent(key)}`)
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load line items");
-        return res.json();
+        if (res.ok) return res.json() as Promise<{ data: { lineItems?: ReportLineItem[]; total?: number }; last_synced_at: string }>;
+        if (res.status === 404) return null;
+        throw new Error("Failed to load cache");
       })
-      .then((data: { line_items: ReportLineItem[]; total: number }) => {
-        if (!cancelled) {
-          setLineItems(data.line_items ?? []);
-          setTotal(data.total ?? 0);
+      .then((json) => {
+        if (cancelled) return;
+        if (json) {
+          setLineItems(json.data.lineItems ?? []);
+          setTotal(json.data.total ?? 0);
+          setLastSyncedAt(json.last_synced_at ? new Date(json.last_synced_at).getTime() : null);
+          setLoading(false);
+          return;
         }
+        return fetch("/api/cache/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key }) })
+          .then((r) => {
+            if (!r.ok) throw new Error("Failed to refresh");
+            return r.json() as Promise<{ data: { lineItems?: ReportLineItem[]; total?: number }; last_synced_at: string }>;
+          })
+          .then((refreshed) => {
+            if (!cancelled) {
+              setLineItems(refreshed.data.lineItems ?? []);
+              setTotal(refreshed.data.total ?? 0);
+              setLastSyncedAt(refreshed.last_synced_at ? new Date(refreshed.last_synced_at).getTime() : null);
+            }
+          });
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
@@ -57,9 +78,25 @@ export default function LineItemsPage() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
+  }, [period]);
+
+  const handleRefresh = useCallback(() => {
+    setError(null);
+    setLoading(true);
+    const key = `line_items-${period}`;
+    fetch("/api/cache/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key }) })
+      .then((res) => {
+        if (!res.ok) throw new Error("Refresh failed");
+        return res.json() as Promise<{ data: { lineItems?: ReportLineItem[]; total?: number }; last_synced_at: string }>;
+      })
+      .then((json) => {
+        setLineItems(json.data.lineItems ?? []);
+        setTotal(json.data.total ?? 0);
+        setLastSyncedAt(json.last_synced_at ? new Date(json.last_synced_at).getTime() : null);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load"))
+      .finally(() => setLoading(false));
   }, [period]);
 
   const sorted = useMemo(
@@ -115,11 +152,14 @@ export default function LineItemsPage() {
 
   return (
     <div className="p-6 space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold text-foreground">Report line items</h1>
-        <p className="text-sm text-muted-foreground mt-0.5">
-          Line-level details from the final report (input → exception detail → output). One row per unique line per broadcast day.
-        </p>
+      <div className="flex flex-wrap items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-semibold text-foreground">Report line items</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
+            Line-level details from the final report (input → exception detail → output). One row per unique line per broadcast day.
+          </p>
+        </div>
+        <RefreshHeader lastSyncedAt={lastSyncedAt} onRefresh={handleRefresh} refreshing={loading} />
       </div>
 
       <div className="flex flex-wrap items-center gap-3">

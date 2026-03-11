@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useMemo } from "react";
+import { useEffect, useState, useMemo, useCallback } from "react";
 import Link from "next/link";
 import {
   BarChart,
@@ -13,40 +13,82 @@ import {
 } from "recharts";
 import dayjs from "dayjs";
 import type { RunSummary } from "@/lib/runs";
-import { statusLabel } from "@/lib/runs";
 import { PERIOD_OPTIONS, type PeriodValue } from "@/lib/periods";
 import type { ReportLineItem } from "@/lib/report-line-items";
+import { getResolutionForLine } from "@/lib/report-line-items";
 import type { CustomerStatRow } from "@/app/api/customer-stats/route";
+import KpiCard, {
+  IconCalendar,
+  IconCheck,
+  IconPercent,
+  IconAlert,
+  IconX,
+  IconChart,
+  IconLightning,
+} from "@/components/KpiCard";
+import RefreshHeader from "@/components/RefreshHeader";
 
 const EXCEPTION_PREVIEW = 10;
 const CUSTOMER_PREVIEW = 10;
+
+function applyHomeData(
+  data: { runs?: RunSummary[]; exceptionItems?: ReportLineItem[]; runResolutions?: Record<string, string>; runExceptionDetails?: Record<string, { type: string; resolution: string }[]>; customers?: CustomerStatRow[] },
+  lastSyncedAt: string | null,
+  setRuns: (v: RunSummary[]) => void,
+  setExceptionItems: (v: ReportLineItem[]) => void,
+  setRunResolutions: (v: Record<string, string>) => void,
+  setRunExceptionDetails: (v: Record<string, { type: string; resolution: string }[]>) => void,
+  setCustomers: (v: CustomerStatRow[]) => void,
+  setLastSyncedAt: (v: number | null) => void
+) {
+  setRuns(data.runs ?? []);
+  setExceptionItems(data.exceptionItems ?? []);
+  setRunResolutions(data.runResolutions ?? {});
+  setRunExceptionDetails(data.runExceptionDetails ?? {});
+  setCustomers(data.customers ?? []);
+  setLastSyncedAt(lastSyncedAt ? new Date(lastSyncedAt).getTime() : null);
+}
 
 export default function HomePage() {
   const [period, setPeriod] = useState<PeriodValue>("30d");
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [exceptionItems, setExceptionItems] = useState<ReportLineItem[]>([]);
   const [runResolutions, setRunResolutions] = useState<Record<string, string>>({});
+  const [runExceptionDetails, setRunExceptionDetails] = useState<Record<string, { type: string; resolution: string }[]>>({});
   const [customers, setCustomers] = useState<CustomerStatRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    Promise.all([
-      fetch(`/api/runs?period=${period}`).then((r) => (r.ok ? r.json() : { runs: [] })),
-      fetch(`/api/report-line-items?period=${period}&exceptions_only=true`).then((r) =>
-        r.ok ? r.json() : { line_items: [], run_resolutions: {} }
-      ),
-      fetch(`/api/customer-stats?period=${period}`).then((r) => (r.ok ? r.json() : { customers: [] })),
-    ])
-      .then(([runsData, itemsData, customersData]) => {
+    const key = `home-${period}`;
+    fetch(`/api/cache?key=${encodeURIComponent(key)}`)
+      .then((res) => {
+        if (res.ok) return res.json() as Promise<{ data: Record<string, unknown>; last_synced_at: string }>;
+        if (res.status === 404) return null;
+        throw new Error("Failed to load cache");
+      })
+      .then((json) => {
         if (cancelled) return;
-        setRuns((runsData as { runs?: RunSummary[] }).runs ?? []);
-        setExceptionItems((itemsData as { line_items?: ReportLineItem[] }).line_items ?? []);
-        setRunResolutions((itemsData as { run_resolutions?: Record<string, string> }).run_resolutions ?? {});
-        setCustomers((customersData as { customers?: CustomerStatRow[] }).customers ?? []);
+        if (json) {
+          const d = json.data as { runs?: RunSummary[]; exceptionItems?: ReportLineItem[]; runResolutions?: Record<string, string>; runExceptionDetails?: Record<string, { type: string; resolution: string }[]>; customers?: CustomerStatRow[] };
+          applyHomeData(d, json.last_synced_at, setRuns, setExceptionItems, setRunResolutions, setRunExceptionDetails, setCustomers, setLastSyncedAt);
+          setLoading(false);
+          return;
+        }
+        return fetch("/api/cache/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key }) })
+          .then((r) => {
+            if (!r.ok) throw new Error("Failed to refresh");
+            return r.json() as Promise<{ data: Record<string, unknown>; last_synced_at: string }>;
+          })
+          .then((refreshed) => {
+            if (cancelled) return;
+            const d = refreshed.data as { runs?: RunSummary[]; exceptionItems?: ReportLineItem[]; runResolutions?: Record<string, string>; runExceptionDetails?: Record<string, { type: string; resolution: string }[]>; customers?: CustomerStatRow[] };
+            applyHomeData(d, refreshed.last_synced_at, setRuns, setExceptionItems, setRunResolutions, setRunExceptionDetails, setCustomers, setLastSyncedAt);
+          });
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load");
@@ -54,9 +96,24 @@ export default function HomePage() {
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
-    return () => {
-      cancelled = true;
-    };
+    return () => { cancelled = true; };
+  }, [period]);
+
+  const handleRefresh = useCallback(() => {
+    setError(null);
+    setLoading(true);
+    const key = `home-${period}`;
+    fetch("/api/cache/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key }) })
+      .then((res) => {
+        if (!res.ok) throw new Error("Refresh failed");
+        return res.json() as Promise<{ data: Record<string, unknown>; last_synced_at: string }>;
+      })
+      .then((json) => {
+        const d = json.data as { runs?: RunSummary[]; exceptionItems?: ReportLineItem[]; runResolutions?: Record<string, string>; runExceptionDetails?: Record<string, { type: string; resolution: string }[]>; customers?: CustomerStatRow[] };
+        applyHomeData(d, json.last_synced_at, setRuns, setExceptionItems, setRunResolutions, setRunExceptionDetails, setCustomers, setLastSyncedAt);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Refresh failed"))
+      .finally(() => setLoading(false));
   }, [period]);
 
   const completed = useMemo(() => runs.filter((r) => r.status === "completed"), [runs]);
@@ -98,6 +155,28 @@ export default function HomePage() {
       ].filter((d) => d.value > 0),
     [completed.length, needsDecision.length, failed.length]
   );
+
+  const completionsPerPeriod = useMemo(() => {
+    const byWeek: Record<string, { autoCompleted: number; manuallyResolved: number }> = {};
+    runs.forEach((r) => {
+      const weekKey = r.createTime
+        ? dayjs(r.createTime).startOf("week").format("YYYY-MM-DD")
+        : "";
+      if (!weekKey) return;
+      if (!byWeek[weekKey]) byWeek[weekKey] = { autoCompleted: 0, manuallyResolved: 0 };
+      if (r.status === "completed") byWeek[weekKey].autoCompleted += 1;
+      else if (r.status === "awaiting_guidance" || r.status === "failed")
+        byWeek[weekKey].manuallyResolved += 1;
+    });
+    return Object.entries(byWeek)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-8)
+      .map(([weekStart, v]) => ({
+        period: `Week of ${dayjs(weekStart).format("MMM D")}`,
+        autoCompleted: v.autoCompleted,
+        manuallyResolved: v.manuallyResolved,
+      }));
+  }, [runs]);
 
   const exceptionPreview = useMemo(
     () =>
@@ -152,46 +231,85 @@ export default function HomePage() {
           <h1 className="text-2xl font-semibold text-foreground">Spot Bookings</h1>
           <p className="text-sm text-muted-foreground mt-0.5">How we’re doing, what needs action, and how customers are doing</p>
         </div>
-        <select
-          value={period}
-          onChange={(e) => setPeriod(e.target.value as PeriodValue)}
-          className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground"
-        >
-          {PERIOD_OPTIONS.map((p) => (
-            <option key={p.value} value={p.value}>{p.label}</option>
-          ))}
-        </select>
+        <div className="flex flex-wrap items-center gap-3">
+          <RefreshHeader lastSyncedAt={lastSyncedAt} onRefresh={handleRefresh} refreshing={loading} />
+          <select
+            value={period}
+            onChange={(e) => setPeriod(e.target.value as PeriodValue)}
+            className="rounded-lg border border-border bg-background px-3 py-1.5 text-sm text-foreground"
+          >
+            {PERIOD_OPTIONS.map((p) => (
+              <option key={p.value} value={p.value}>{p.label}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Section A — How we're doing */}
       <section>
         <h2 className="text-sm font-medium text-muted-foreground mb-3">How we’re doing</h2>
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-          <div className="rounded-lg border border-border bg-card p-4">
-            <p className="text-xs font-medium text-muted-foreground">Broadcast days</p>
-            <p className="text-xl font-semibold text-foreground mt-1">{runs.length}</p>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-4">
-            <p className="text-xs font-medium text-muted-foreground">Spots placed</p>
-            <p className="text-xl font-semibold text-foreground mt-1">{totalSpotsScheduled}</p>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-4">
-            <p className="text-xs font-medium text-muted-foreground">Placement rate</p>
-            <p className="text-xl font-semibold text-foreground mt-1">{placementRate != null ? `${placementRate}%` : "—"}</p>
-          </div>
-          <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 p-4">
-            <p className="text-xs font-medium text-amber-700 dark:text-amber-400">Awaiting resolution</p>
-            <p className="text-xl font-semibold text-foreground mt-1">{needsDecision.length}</p>
-          </div>
-          <div className="rounded-lg border border-destructive/20 bg-destructive/5 p-4">
-            <p className="text-xs font-medium text-destructive">Failed</p>
-            <p className="text-xl font-semibold text-foreground mt-1">{failed.length}</p>
-          </div>
-          <div className="rounded-lg border border-border bg-card p-4">
-            <p className="text-xs font-medium text-muted-foreground">Avg spots / day</p>
-            <p className="text-xl font-semibold text-foreground mt-1">{avgSpotsPerDay ?? "—"}</p>
-          </div>
+          <KpiCard label="Broadcast days" value={runs.length} icon={<IconCalendar />} />
+          <KpiCard label="Spots placed" value={totalSpotsScheduled} icon={<IconCheck />} />
+          <KpiCard label="Placement rate" value={placementRate != null ? `${placementRate}%` : "—"} icon={<IconPercent />} />
+          <KpiCard label="Awaiting resolution" value={needsDecision.length} icon={<IconAlert />} variant="warning" />
+          <KpiCard label="Failed" value={failed.length} icon={<IconX />} variant="destructive" />
+          <KpiCard label="Avg spots / day" value={avgSpotsPerDay ?? "—"} icon={<IconChart />} />
         </div>
+
+        {/* Kognitos automation insights */}
+        <div className="mt-6 rounded-lg border border-border bg-card p-4">
+          <h3 className="text-sm font-medium text-foreground flex items-center gap-2 mb-4">
+            <span className="flex h-8 w-8 items-center justify-center rounded-full bg-primary/10 text-primary">
+              <IconLightning />
+            </span>
+            Kognitos automation insights
+          </h3>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 mb-4">
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Total runs</p>
+              <p className="text-2xl font-semibold text-foreground mt-0.5">{runs.length}</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">STP rate</p>
+              <p className="text-2xl font-semibold text-foreground mt-0.5">{placementRate != null ? `${placementRate}%` : "—"}</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Time saved</p>
+              <p className="text-2xl font-semibold text-foreground mt-0.5">—</p>
+            </div>
+            <div>
+              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Revenue (period)</p>
+              <p className="text-2xl font-semibold text-foreground mt-0.5">{totalRevenue > 0 ? `$${totalRevenue.toFixed(0)}` : "—"}</p>
+            </div>
+          </div>
+          {completionsPerPeriod.length > 0 && (
+            <>
+              <p className="text-xs font-medium text-muted-foreground mb-2">Completions per period</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="border-b border-border">
+                      <th className="text-left py-2 font-medium text-foreground">Period</th>
+                      <th className="text-right py-2 font-medium text-foreground">Auto-completed</th>
+                      <th className="text-right py-2 font-medium text-foreground">Manually resolved</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {completionsPerPeriod.map((row) => (
+                      <tr key={row.period} className="border-b border-border/50">
+                        <td className="py-2 text-foreground">{row.period}</td>
+                        <td className="py-2 text-right text-muted-foreground">{row.autoCompleted}</td>
+                        <td className="py-2 text-right text-muted-foreground">{row.manuallyResolved}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </>
+          )}
+        </div>
+
         <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4">
           <div className="rounded-lg border border-border bg-card p-4">
             <p className="text-sm font-medium text-foreground mb-2">Spot bookings by day</p>
@@ -273,8 +391,8 @@ export default function HomePage() {
                       <td className="px-4 py-2 text-foreground truncate max-w-[12rem]" title={item.exception_detail}>
                         {item.exception_detail || "—"}
                       </td>
-                      <td className="px-4 py-2 text-foreground truncate max-w-[14rem]" title={runResolutions[item.source_run_id ?? item.run_id ?? ""]}>
-                        {runResolutions[item.source_run_id ?? item.run_id ?? ""] ?? "—"}
+                      <td className="px-4 py-2 text-foreground truncate max-w-[14rem]" title={getResolutionForLine(item, runExceptionDetails)}>
+                        {getResolutionForLine(item, runExceptionDetails)}
                       </td>
                       <td className="px-4 py-2">
                         {(item.source_run_id ?? item.run_id) && (

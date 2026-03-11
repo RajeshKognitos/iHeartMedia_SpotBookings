@@ -1,47 +1,119 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import dayjs from "dayjs";
-import type { RunSummary } from "@/lib/runs";
-import { statusLabel } from "@/lib/runs";
+import type { RunSummary, RunStatus } from "@/lib/runs";
 import ErrorState from "@/components/ErrorState";
+import StatusBadge from "@/components/StatusBadge";
+import RefreshHeader from "@/components/RefreshHeader";
 
+const CACHE_KEY_RUNS = "runs";
 const DEFAULT_PERIOD = "all";
+const PAGE_SIZE = 10;
+type StatusFilter = "all" | "completed" | "awaiting_guidance" | "failed";
+
+function downloadRunsCsv(runs: RunSummary[]) {
+  const header = "Job ID,Started,Status,Spots scheduled,Success rate,Exception\n";
+  const escape = (s: string | number | undefined) => {
+    const t = (s ?? "").toString().replace(/"/g, '""');
+    return t.includes(",") || t.includes('"') || t.includes("\n") ? `"${t}"` : t;
+  };
+  const rows = runs.map(
+    (r) =>
+      `${escape(r.id)},${escape(r.createTime ? dayjs(r.createTime).format("YYYY-MM-DD HH:mm") : "")},${escape(r.status)},${escape(r.outputs?.total_scheduled ?? "")},${escape(r.outputs?.success_rate != null ? `${r.outputs.success_rate}%` : "")},${escape(r.exception_summary)}`
+  );
+  const csv = header + rows.join("\n");
+  const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `job-runs-${dayjs().format("YYYY-MM-DD")}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 export default function RunJobPage() {
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [runsLoading, setRunsLoading] = useState(true);
   const [runsError, setRunsError] = useState<string | null>(null);
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>("all");
+  const [page, setPage] = useState(0);
   const [sharepointUrl, setSharepointUrl] = useState("");
   const [broadcastDate, setBroadcastDate] = useState("");
   const [files, setFiles] = useState<File[]>([]);
   const [startLoading, setStartLoading] = useState(false);
   const [startError, setStartError] = useState<string | null>(null);
   const [startSuccess, setStartSuccess] = useState<{ runId: string; kognitosUrl: string } | null>(null);
+  const [lastSyncedAt, setLastSyncedAt] = useState<number | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setRunsLoading(true);
+    setRunsError(null);
+    fetch(`/api/cache?key=${encodeURIComponent(CACHE_KEY_RUNS)}`)
+      .then((res) => {
+        if (res.ok) return res.json() as Promise<{ data: { runs?: RunSummary[] }; last_synced_at: string }>;
+        if (res.status === 404) return null;
+        throw new Error("Failed to load cache");
+      })
+      .then((json) => {
+        if (cancelled) return;
+        if (json) {
+          setRuns(json.data.runs ?? []);
+          setLastSyncedAt(json.last_synced_at ? new Date(json.last_synced_at).getTime() : null);
+          setRunsLoading(false);
+          return;
+        }
+        return fetch("/api/cache/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: CACHE_KEY_RUNS }) })
+          .then((r) => {
+            if (!r.ok) throw new Error("Failed to refresh");
+            return r.json() as Promise<{ data: { runs?: RunSummary[] }; last_synced_at: string }>;
+          })
+          .then((refreshed) => {
+            if (cancelled) return;
+            setRuns(refreshed.data.runs ?? []);
+            setLastSyncedAt(refreshed.last_synced_at ? new Date(refreshed.last_synced_at).getTime() : null);
+          });
+      })
+      .catch((e) => {
+        if (!cancelled) setRunsError(e instanceof Error ? e.message : "Failed to load runs");
+      })
+      .finally(() => {
+        if (!cancelled) setRunsLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, []);
 
   const fetchRuns = useCallback(() => {
     setRunsLoading(true);
     setRunsError(null);
-    fetch(`/api/runs?period=${DEFAULT_PERIOD}`)
+    fetch("/api/cache/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ key: CACHE_KEY_RUNS }) })
       .then((res) => {
-        if (!res.ok) throw new Error("Failed to load runs");
-        return res.json();
+        if (!res.ok) throw new Error("Refresh failed");
+        return res.json() as Promise<{ data: { runs?: RunSummary[] }; last_synced_at: string }>;
       })
-      .then((data: { runs: RunSummary[] }) => {
-        setRuns(data.runs ?? []);
+      .then((data) => {
+        setRuns(data.data.runs ?? []);
+        setLastSyncedAt(data.last_synced_at ? new Date(data.last_synced_at).getTime() : null);
       })
-      .catch((e) => {
-        setRunsError(e instanceof Error ? e.message : "Failed to load runs");
-      })
-      .finally(() => {
-        setRunsLoading(false);
-      });
+      .catch((e) => setRunsError(e instanceof Error ? e.message : "Failed to load runs"))
+      .finally(() => setRunsLoading(false));
   }, []);
 
-  useEffect(() => {
-    fetchRuns();
-  }, [fetchRuns]);
+  const filteredRuns = useMemo(() => {
+    if (statusFilter === "all") return runs;
+    return runs.filter((r) => r.status === statusFilter);
+  }, [runs, statusFilter]);
+
+  const paginatedRuns = useMemo(() => {
+    const start = page * PAGE_SIZE;
+    return filteredRuns.slice(start, start + PAGE_SIZE);
+  }, [filteredRuns, page]);
+
+  const totalPages = Math.ceil(filteredRuns.length / PAGE_SIZE) || 1;
+  const from = filteredRuns.length === 0 ? 0 : page * PAGE_SIZE + 1;
+  const to = Math.min((page + 1) * PAGE_SIZE, filteredRuns.length);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -126,10 +198,16 @@ export default function RunJobPage() {
       });
   }
 
+  const handleRefresh = useCallback(() => {
+    setRunsError(null);
+    fetchRuns();
+  }, [fetchRuns]);
+
   return (
     <div className="p-6 space-y-6">
-      <div>
+      <div className="flex flex-wrap items-center justify-between gap-3">
         <Link href="/" className="text-sm text-primary hover:underline">← Home</Link>
+        <RefreshHeader lastSyncedAt={lastSyncedAt} onRefresh={handleRefresh} refreshing={runsLoading} />
       </div>
 
       <section className="rounded-lg border border-border bg-card p-4">
@@ -218,10 +296,40 @@ export default function RunJobPage() {
       </section>
 
       <section className="rounded-lg border border-border bg-card overflow-hidden">
-        <div className="px-4 py-3 border-b border-border flex items-center justify-between">
+        <div className="px-4 py-3 border-b border-border flex flex-wrap items-center justify-between gap-3">
           <h2 className="text-lg font-medium text-foreground">Job runs</h2>
-          <span className="text-sm text-muted-foreground">{runs.length} run{runs.length !== 1 ? "s" : ""}</span>
+          <div className="flex items-center gap-2">
+            <span className="text-sm text-muted-foreground">{filteredRuns.length} run{filteredRuns.length !== 1 ? "s" : ""} total</span>
+            {filteredRuns.length > 0 && (
+              <button
+                type="button"
+                onClick={() => downloadRunsCsv(filteredRuns)}
+                className="rounded-md border border-border bg-background px-3 py-1.5 text-sm font-medium text-foreground hover:bg-muted/50"
+              >
+                Download CSV
+              </button>
+            )}
+          </div>
         </div>
+        {filteredRuns.length > 0 && (
+          <div className="px-4 pt-2 pb-3 flex flex-wrap items-center gap-2 border-b border-border">
+            <span className="text-xs font-medium text-muted-foreground">Status:</span>
+            {(["all", "completed", "awaiting_guidance", "failed"] as const).map((f) => (
+              <button
+                key={f}
+                type="button"
+                onClick={() => { setStatusFilter(f); setPage(0); }}
+                className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
+                  statusFilter === f
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-muted/50 text-muted-foreground hover:bg-muted"
+                }`}
+              >
+                {f === "all" ? "All" : f === "completed" ? "Clear" : f === "awaiting_guidance" ? "Needs decision" : "Failed"}
+              </button>
+            ))}
+          </div>
+        )}
         {runsError && (
           <div className="p-4">
             <ErrorState title="Could not load runs" message={runsError} />
@@ -238,46 +346,91 @@ export default function RunJobPage() {
             No runs yet. Start a job above to see it here.
           </div>
         )}
-        {!runsError && !runsLoading && runs.length > 0 && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="bg-muted/30 border-b border-border">
-                  <th className="text-left px-4 py-2 font-medium text-foreground">Job ID</th>
-                  <th className="text-left px-4 py-2 font-medium text-foreground">Started</th>
-                  <th className="text-left px-4 py-2 font-medium text-foreground">Status</th>
-                  <th className="text-left px-4 py-2 font-medium text-foreground">Spots scheduled</th>
-                  <th className="text-left px-4 py-2 font-medium text-foreground">Success rate</th>
-                  <th className="text-left px-4 py-2 font-medium text-foreground">Exception</th>
-                  <th className="text-left px-4 py-2 font-medium text-foreground">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {runs.map((run) => (
-                  <tr key={run.id} className="border-b border-border hover:bg-muted/20">
-                    <td className="px-4 py-2 text-foreground font-mono text-xs">{run.id.slice(0, 12)}…</td>
-                    <td className="px-4 py-2 text-muted-foreground">
-                      {run.createTime ? dayjs(run.createTime).format("MMM D, YYYY HH:mm") : "—"}
-                    </td>
-                    <td className="px-4 py-2">{statusLabel(run.status)}</td>
-                    <td className="px-4 py-2 text-muted-foreground">
-                      {run.outputs?.total_scheduled ?? "—"}
-                    </td>
-                    <td className="px-4 py-2 text-muted-foreground">
-                      {run.outputs?.success_rate != null ? `${run.outputs.success_rate}%` : "—"}
-                    </td>
-                    <td className="px-4 py-2 text-muted-foreground max-w-[200px] truncate" title={run.exception_summary}>
-                      {run.exception_summary ?? "—"}
-                    </td>
-                    <td className="px-4 py-2">
-                      <Link href={`/jobs/${run.id}`} className="text-primary hover:underline mr-2">View details</Link>
-                      <a href={run.kognitosUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">View in Kognitos</a>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+        {!runsError && !runsLoading && filteredRuns.length === 0 && runs.length > 0 && (
+          <div className="p-8 text-center text-muted-foreground">
+            No runs match the selected status filter.
           </div>
+        )}
+        {!runsError && !runsLoading && paginatedRuns.length > 0 && (
+          <>
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="bg-muted/30 border-b border-border">
+                    <th className="text-left px-4 py-2 font-medium text-foreground">Job ID</th>
+                    <th className="text-left px-4 py-2 font-medium text-foreground">Started</th>
+                    <th className="text-left px-4 py-2 font-medium text-foreground">Status</th>
+                    <th className="text-left px-4 py-2 font-medium text-foreground">Spots scheduled</th>
+                    <th className="text-left px-4 py-2 font-medium text-foreground">Success rate</th>
+                    <th className="text-left px-4 py-2 font-medium text-foreground">Exception</th>
+                    <th className="text-left px-4 py-2 font-medium text-foreground">Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedRuns.map((run) => (
+                    <tr key={run.id} className="border-b border-border hover:bg-muted/20">
+                      <td className="px-4 py-2 text-foreground font-mono text-xs">{run.id.slice(0, 12)}…</td>
+                      <td className="px-4 py-2 text-muted-foreground">
+                        {run.createTime ? dayjs(run.createTime).format("MMM D, YYYY HH:mm") : "—"}
+                      </td>
+                      <td className="px-4 py-2">
+                        <StatusBadge status={run.status as RunStatus} />
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground">
+                        {run.outputs?.total_scheduled ?? "—"}
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground">
+                        {run.outputs?.success_rate != null ? `${run.outputs.success_rate}%` : "—"}
+                      </td>
+                      <td className="px-4 py-2 text-muted-foreground max-w-[200px] truncate" title={run.exception_summary}>
+                        {run.exception_summary ?? "—"}
+                      </td>
+                      <td className="px-4 py-2">
+                        <Link href={`/jobs/${run.id}`} className="text-primary hover:underline mr-2">View details</Link>
+                        <a href={run.kognitosUrl} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">View in Kognitos</a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            {totalPages > 1 && (
+              <div className="px-4 py-3 border-t border-border flex flex-wrap items-center justify-between gap-2">
+                <span className="text-sm text-muted-foreground">
+                  {from}-{to} of {filteredRuns.length} runs
+                </span>
+                <div className="flex items-center gap-2">
+                  <select
+                    value={page}
+                    onChange={(e) => setPage(Number(e.target.value))}
+                    className="rounded border border-border bg-background px-2 py-1 text-xs text-foreground"
+                  >
+                    {Array.from({ length: totalPages }, (_, i) => (
+                      <option key={i} value={i}>
+                        Page {i + 1}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.max(0, p - 1))}
+                    disabled={page === 0}
+                    className="rounded border border-border bg-background px-2 py-1 text-xs font-medium text-foreground disabled:opacity-50"
+                  >
+                    Previous
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setPage((p) => Math.min(totalPages - 1, p + 1))}
+                    disabled={page >= totalPages - 1}
+                    className="rounded border border-border bg-background px-2 py-1 text-xs font-medium text-foreground disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </>
         )}
       </section>
     </div>

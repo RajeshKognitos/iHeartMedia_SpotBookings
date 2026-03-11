@@ -77,6 +77,7 @@ export async function GET(request: Request) {
     }
 
     let run_resolutions: Record<string, string> = {};
+    let run_exception_details: Record<string, { type: string; resolution: string }[]> = {};
     if (exceptionsOnly && result.length > 0) {
       const runIds = [...new Set(result.map((i) => i.source_run_id ?? i.run_id).filter(Boolean))];
       for (const rid of runIds) {
@@ -85,6 +86,7 @@ export async function GET(request: Request) {
         const raw = await runRes.json();
         const details = getExceptionDetailsFromRun(raw);
         run_resolutions[rid] = details.map((d) => `${d.type}: ${d.resolution}`).join("; ") || "—";
+        run_exception_details[rid] = details.map((d) => ({ type: d.type, resolution: d.resolution }));
       }
     }
 
@@ -92,7 +94,7 @@ export async function GET(request: Request) {
       line_items: result,
       total: result.length,
       period,
-      ...(exceptionsOnly && { run_resolutions }),
+      ...(exceptionsOnly && { run_resolutions, run_exception_details }),
     });
   } catch (e) {
     console.error("[api/report-line-items]", e);
