@@ -30,16 +30,16 @@ In the Vercel project, go to **Settings** → **Environment Variables** and add 
 | `KOGNITOS_BASE_URL` | Yes | e.g. `https://app.us-1.kognitos.com/api/v1` |
 | `KOGNITOS_AUTOMATION_ID` | Yes | Automation (process) ID |
 | `NEXT_PUBLIC_KOGNITOS_URL` | Yes | Base app URL for links, e.g. `https://app.us-1.kognitos.com/organizations/{ORG_ID}/workspaces/{WS_ID}` |
-| `NEXT_PUBLIC_SUPABASE_URL` | Yes (Chat + cache) | Supabase project URL |
-| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Yes (for Chat) | Supabase anon key |
-| `SUPABASE_SERVICE_ROLE_KEY` | Yes (Chat + cache) | Supabase service role key; used server-side for persisted data cache |
-| `ANTHROPIC_API_KEY` | Yes (for Chat) | Claude API key |
+| `NEXT_PUBLIC_SUPABASE_URL` | Optional | Supabase project URL — needed for Chat persistence and for *persisted* data cache (see below) |
+| `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Optional | Supabase anon key — needed for Chat |
+| `SUPABASE_SERVICE_ROLE_KEY` | Optional | Supabase service role key — needed for persisted data cache and Chat backend |
+| `ANTHROPIC_API_KEY` | Optional (for Chat) | Claude API key — needed only if you use the Chat page |
 | `KOGNITOS_REST_API_URL` | Optional | For file upload, e.g. `https://rest-api.app.kognitos.com` |
 | `KOGNITOS_API_KEY` | Optional | REST API key for file upload |
 
 Use the same values as in your local `.env`. Never commit `.env` to the repo.
 
-**Data cache:** Dashboard data (Home, Run job, Exceptions, Customers, Line items) is persisted in Supabase so it survives tab close and is shared across devices. Ensure the `data_cache` table exists (run the migration in `supabase/migrations/00000000000002_data_cache.sql` in the Supabase SQL editor or via `supabase db push`). If Supabase or the table is missing, cache reads return 404 and the app will fetch fresh data on each load/refresh.
+**Why Supabase is used:** (1) **Data cache** — dashboard data is stored in Supabase so it survives closing the tab and is shared across devices; (2) **Chat** — chat sessions and messages are stored in Supabase so history persists. **If you don’t have Supabase (or don’t set these env vars):** the app still works: dashboard pages fetch fresh data on each load/refresh (no persistence), and the Chat page may not persist history. So you can deploy with only the Kognitos variables and use the app; add Supabase when you want persisted cache and chat. If you do use Supabase for cache, run the migration `supabase/migrations/00000000000002_data_cache.sql` so the `data_cache` table exists.
 
 ## 4. Dependencies (Lattice UI)
 

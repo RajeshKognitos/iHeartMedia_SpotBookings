@@ -88,7 +88,12 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: "Invalid key" }, { status: 400 });
     }
 
-    const { last_synced_at } = await setCache(key, data);
+    const last_synced_at = new Date().toISOString();
+    try {
+      await setCache(key, data);
+    } catch {
+      // Supabase not configured: still return data so the app works without persistence
+    }
     return NextResponse.json({ data, last_synced_at });
   } catch (e) {
     console.error("[api/cache/refresh]", e);
