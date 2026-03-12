@@ -50,11 +50,9 @@ export async function POST(request: Request) {
         fetch(`${origin}/api/report-line-items?period=${parsed.period}&exceptions_only=true`),
         fetch(`${origin}/api/customer-stats?period=${parsed.period}`),
       ]);
-      const [runsData, itemsData, customersData] = await Promise.all([
-        runsRes.ok ? runsRes.json() : { runs: [] },
-        itemsRes.ok ? itemsRes.json() : { line_items: [], run_resolutions: {}, run_exception_details: {} },
-        customersRes.ok ? customersRes.json() : { customers: [] },
-      ]);
+      const runsData = runsRes.ok ? (await runsRes.json()) as { runs?: unknown[] } : { runs: [] };
+      const itemsData = itemsRes.ok ? (await itemsRes.json()) as { line_items?: unknown[]; run_resolutions?: Record<string, string>; run_exception_details?: Record<string, unknown[]> } : { line_items: [], run_resolutions: {}, run_exception_details: {} };
+      const customersData = customersRes.ok ? (await customersRes.json()) as { customers?: unknown[] } : { customers: [] };
       data = {
         runs: runsData.runs ?? [],
         exceptionItems: itemsData.line_items ?? [],
@@ -65,11 +63,11 @@ export async function POST(request: Request) {
       };
     } else if (parsed.type === "runs") {
       const res = await fetch(`${origin}/api/runs?period=all`);
-      const runsData = await res.ok ? res.json() : { runs: [] };
+      const runsData = res.ok ? (await res.json()) as { runs?: unknown[] } : { runs: [] };
       data = { runs: runsData.runs ?? [] };
     } else if (parsed.type === "exceptions" && parsed.period) {
       const res = await fetch(`${origin}/api/report-line-items?period=${parsed.period}&exceptions_only=true`);
-      const itemsData = await res.ok ? res.json() : { line_items: [], run_resolutions: {}, run_exception_details: {} };
+      const itemsData = res.ok ? (await res.json()) as { line_items?: unknown[]; run_resolutions?: Record<string, string>; run_exception_details?: Record<string, unknown[]> } : { line_items: [], run_resolutions: {}, run_exception_details: {} };
       data = {
         lineItems: itemsData.line_items ?? [],
         runResolutions: itemsData.run_resolutions ?? {},
@@ -77,11 +75,11 @@ export async function POST(request: Request) {
       };
     } else if (parsed.type === "customers" && parsed.period) {
       const res = await fetch(`${origin}/api/customer-stats?period=${parsed.period}`);
-      const customersData = await res.ok ? res.json() : { customers: [] };
+      const customersData = res.ok ? (await res.json()) as { customers?: unknown[] } : { customers: [] };
       data = { customers: customersData.customers ?? [] };
     } else if (parsed.type === "line_items" && parsed.period) {
       const res = await fetch(`${origin}/api/report-line-items?period=${parsed.period}`);
-      const itemsData = await res.ok ? res.json() : { line_items: [], total: 0 };
+      const itemsData = res.ok ? (await res.json()) as { line_items?: unknown[]; total?: number } : { line_items: [], total: 0 };
       data = {
         lineItems: itemsData.line_items ?? [],
         total: itemsData.total ?? 0,
