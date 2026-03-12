@@ -39,7 +39,10 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Invalid key" }, { status: 400 });
   }
 
-  const origin = new URL(request.url).origin;
+  // Build origin from headers so serverless (Vercel) calls the correct host, not an internal URL
+  const host = request.headers.get("x-forwarded-host") ?? request.headers.get("host") ?? "";
+  const proto = request.headers.get("x-forwarded-proto") ?? (host.includes("localhost") ? "http" : "https");
+  const origin = host ? `${proto}://${host}` : new URL(request.url).origin;
 
   try {
     let data: unknown;
@@ -50,6 +53,9 @@ export async function POST(request: Request) {
         fetch(`${origin}/api/report-line-items?period=${parsed.period}&exceptions_only=true`),
         fetch(`${origin}/api/customer-stats?period=${parsed.period}`),
       ]);
+      if (!runsRes.ok) console.warn("[cache/refresh] /api/runs returned", runsRes.status);
+      if (!itemsRes.ok) console.warn("[cache/refresh] /api/report-line-items returned", itemsRes.status);
+      if (!customersRes.ok) console.warn("[cache/refresh] /api/customer-stats returned", customersRes.status);
       const runsData = runsRes.ok ? (await runsRes.json()) as { runs?: unknown[] } : { runs: [] };
       const itemsData = itemsRes.ok ? (await itemsRes.json()) as { line_items?: unknown[]; run_resolutions?: Record<string, string>; run_exception_details?: Record<string, unknown[]> } : { line_items: [], run_resolutions: {}, run_exception_details: {} };
       const customersData = customersRes.ok ? (await customersRes.json()) as { customers?: unknown[] } : { customers: [] };
@@ -89,10 +95,18 @@ export async function POST(request: Request) {
     }
 
     const last_synced_at = new Date().toISOString();
+    // Only persist non-empty data so we don't cache "no data" (e.g. after a failed Kognitos fetch)
+    const d = data as { runs?: unknown[]; exceptionItems?: unknown[]; customers?: unknown[] };
+    const isEmpty =
+      (parsed.type === "home" &&
+        (d.runs?.length ?? 0) === 0 &&
+        (d.exceptionItems?.length ?? 0) === 0 &&
+        (d.customers?.length ?? 0) === 0) ||
+      (parsed.type === "runs" && (d.runs?.length ?? 0) === 0);
     try {
-      await setCache(key, data);
+      if (!isEmpty) await setCache(key, data);
     } catch {
-      // Supabase not configured: still return data so the app works without persistence
+      // Supabase not configured or table missing: still return data
     }
     return NextResponse.json({ data, last_synced_at });
   } catch (e) {
